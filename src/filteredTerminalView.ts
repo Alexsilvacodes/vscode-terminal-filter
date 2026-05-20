@@ -316,6 +316,135 @@ export class FilteredTerminalView implements vscode.WebviewViewProvider {
   let currentPattern = '';
   let autoScroll = true;
 
+  // ANSI color code -> CSS variable mapping
+  const FG = {
+    30:'var(--vscode-terminal-ansiBlack)',31:'var(--vscode-terminal-ansiRed)',
+    32:'var(--vscode-terminal-ansiGreen)',33:'var(--vscode-terminal-ansiYellow)',
+    34:'var(--vscode-terminal-ansiBlue)',35:'var(--vscode-terminal-ansiMagenta)',
+    36:'var(--vscode-terminal-ansiCyan)',37:'var(--vscode-terminal-ansiWhite)',
+    90:'var(--vscode-terminal-ansiBrightBlack)',91:'var(--vscode-terminal-ansiBrightRed)',
+    92:'var(--vscode-terminal-ansiBrightGreen)',93:'var(--vscode-terminal-ansiBrightYellow)',
+    94:'var(--vscode-terminal-ansiBrightBlue)',95:'var(--vscode-terminal-ansiBrightMagenta)',
+    96:'var(--vscode-terminal-ansiBrightCyan)',97:'var(--vscode-terminal-ansiBrightWhite)',
+  };
+  const BG = {
+    40:'var(--vscode-terminal-ansiBlack)',41:'var(--vscode-terminal-ansiRed)',
+    42:'var(--vscode-terminal-ansiGreen)',43:'var(--vscode-terminal-ansiYellow)',
+    44:'var(--vscode-terminal-ansiBlue)',45:'var(--vscode-terminal-ansiMagenta)',
+    46:'var(--vscode-terminal-ansiCyan)',47:'var(--vscode-terminal-ansiWhite)',
+    100:'var(--vscode-terminal-ansiBrightBlack)',101:'var(--vscode-terminal-ansiBrightRed)',
+    102:'var(--vscode-terminal-ansiBrightGreen)',103:'var(--vscode-terminal-ansiBrightYellow)',
+    104:'var(--vscode-terminal-ansiBrightBlue)',105:'var(--vscode-terminal-ansiBrightMagenta)',
+    106:'var(--vscode-terminal-ansiBrightCyan)',107:'var(--vscode-terminal-ansiBrightWhite)',
+  };
+
+  function color256(n) {
+    if (n < 8) return FG[n + 30];
+    if (n < 16) return FG[n - 8 + 90];
+    if (n < 232) {
+      n -= 16;
+      const r = Math.floor(n / 36) * 51;
+      const g = Math.floor((n % 36) / 6) * 51;
+      const b = (n % 6) * 51;
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+    const v = (n - 232) * 10 + 8;
+    return 'rgb(' + v + ',' + v + ',' + v + ')';
+  }
+
+  function escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function buildStyle(fg, bg, bold, dim, italic, underline) {
+    let s = '';
+    if (fg) s += 'color:' + fg + ';';
+    if (bg) s += 'background-color:' + bg + ';';
+    if (bold) s += 'font-weight:bold;';
+    if (dim) s += 'opacity:0.7;';
+    if (italic) s += 'font-style:italic;';
+    if (underline) s += 'text-decoration:underline;';
+    return s;
+  }
+
+  var RE_SPECIAL = /[-\\/\\\\^$*+?.()|[\\]{}]/g;
+  function escapeRegexStr(s) {
+    return s.replace(RE_SPECIAL, '\\\\$&');
+  }
+
+  function highlightText(html, pattern, isRgx, caseSensitive) {
+    if (!pattern) return html;
+    try {
+      const flags = 'g' + (caseSensitive ? '' : 'i');
+      const escaped = isRgx ? pattern : escapeRegexStr(pattern);
+      return html.replace(new RegExp(escaped, flags), '<mark>$&</mark>');
+    } catch { return html; }
+  }
+
+  // Parse ANSI SGR codes into styled HTML, with optional match highlighting
+  function ansiToHtml(raw, pattern, isRgx, caseSensitive) {
+    const SGR = /\\x1b\\[([0-9;]*)m/g;
+    let result = '';
+    let last = 0;
+    let fg = null, bg = null, bold = false, dim = false, italic = false, underline = false;
+
+    let m;
+    while ((m = SGR.exec(raw)) !== null) {
+      const before = raw.substring(last, m.index);
+      if (before) {
+        const html = highlightText(escapeHtml(before), pattern, isRgx, caseSensitive);
+        const style = buildStyle(fg, bg, bold, dim, italic, underline);
+        result += style ? '<span style="' + style + '">' + html + '</span>' : html;
+      }
+      last = SGR.lastIndex;
+
+      const params = m[1] ? m[1].split(';').map(Number) : [0];
+      let i = 0;
+      while (i < params.length) {
+        const p = params[i];
+        if (p === 0) { fg = null; bg = null; bold = false; dim = false; italic = false; underline = false; }
+        else if (p === 1) bold = true;
+        else if (p === 2) dim = true;
+        else if (p === 3) italic = true;
+        else if (p === 4) underline = true;
+        else if (p === 22) { bold = false; dim = false; }
+        else if (p === 23) italic = false;
+        else if (p === 24) underline = false;
+        else if (p >= 30 && p <= 37) fg = FG[p];
+        else if (p === 38) {
+          if (params[i+1] === 5 && i+2 < params.length) { fg = color256(params[i+2]); i += 2; }
+          else if (params[i+1] === 2 && i+4 < params.length) { fg = 'rgb('+params[i+2]+','+params[i+3]+','+params[i+4]+')'; i += 4; }
+        }
+        else if (p === 39) fg = null;
+        else if (p >= 40 && p <= 47) bg = BG[p];
+        else if (p === 48) {
+          if (params[i+1] === 5 && i+2 < params.length) { bg = color256(params[i+2]); i += 2; }
+          else if (params[i+1] === 2 && i+4 < params.length) { bg = 'rgb('+params[i+2]+','+params[i+3]+','+params[i+4]+')'; i += 4; }
+        }
+        else if (p === 49) bg = null;
+        else if (p >= 90 && p <= 97) fg = FG[p];
+        else if (p >= 100 && p <= 107) bg = BG[p];
+        i++;
+      }
+    }
+
+    const tail = raw.substring(last);
+    if (tail) {
+      const html = highlightText(escapeHtml(tail), pattern, isRgx, caseSensitive);
+      const style = buildStyle(fg, bg, bold, dim, italic, underline);
+      result += style ? '<span style="' + style + '">' + html + '</span>' : html;
+    }
+
+    return result;
+  }
+
+  function renderLineHtml(text, pattern, isRgx, caseSensitive) {
+    if (/\\x1b\\[/.test(text)) {
+      return ansiToHtml(text, pattern, isRgx, caseSensitive);
+    }
+    return highlightText(escapeHtml(text), pattern, isRgx, caseSensitive);
+  }
+
   outputEl.addEventListener('scroll', () => {
     const atBottom = outputEl.scrollHeight - outputEl.scrollTop - outputEl.clientHeight < 30;
     autoScroll = atBottom;
@@ -361,22 +490,18 @@ export class FilteredTerminalView implements vscode.WebviewViewProvider {
     vscode.postMessage({ type: 'clearBuffer' });
   });
 
-  function escapeHtml(text) {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  function highlightMatches(text, pattern, isRgx, caseSensitive) {
-    if (!pattern) return escapeHtml(text);
-    try {
-      const flags = 'g' + (caseSensitive ? '' : 'i');
-      const re = isRgx ? new RegExp(pattern, flags) : new RegExp(pattern.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&'), flags);
-      const escaped = escapeHtml(text);
-      const escapedPattern = isRgx ? pattern : pattern.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
-      const highlightRe = new RegExp(escapedPattern, flags);
-      return escaped.replace(highlightRe, '<mark>$&</mark>');
-    } catch {
-      return escapeHtml(text);
-    }
+  function makeLine(line, pattern, isRgx, caseSensitive) {
+    const div = document.createElement('div');
+    div.className = 'line';
+    const numSpan = document.createElement('span');
+    numSpan.className = 'line-number';
+    numSpan.textContent = String(line.lineNumber);
+    const textSpan = document.createElement('span');
+    textSpan.className = 'line-text';
+    textSpan.innerHTML = renderLineHtml(line.text, pattern, isRgx, caseSensitive);
+    div.appendChild(numSpan);
+    div.appendChild(textSpan);
+    return div;
   }
 
   function renderLines(lines, pattern, isRgx, caseSensitive) {
@@ -390,17 +515,7 @@ export class FilteredTerminalView implements vscode.WebviewViewProvider {
     emptyStateEl.style.display = 'none';
     const fragment = document.createDocumentFragment();
     for (const line of lines) {
-      const div = document.createElement('div');
-      div.className = 'line';
-      const numSpan = document.createElement('span');
-      numSpan.className = 'line-number';
-      numSpan.textContent = String(line.lineNumber);
-      const textSpan = document.createElement('span');
-      textSpan.className = 'line-text';
-      textSpan.innerHTML = highlightMatches(line.text, pattern, isRgx, caseSensitive);
-      div.appendChild(numSpan);
-      div.appendChild(textSpan);
-      fragment.appendChild(div);
+      fragment.appendChild(makeLine(line, pattern, isRgx, caseSensitive));
     }
     const existing = outputEl.querySelectorAll('.line');
     existing.forEach(el => el.remove());
@@ -410,16 +525,10 @@ export class FilteredTerminalView implements vscode.WebviewViewProvider {
     }
   }
 
-  let lastLines = [];
-  let lastPattern = '';
-  let lastIsRegex = false;
-  let lastCaseSensitive = false;
-
   window.addEventListener('message', (event) => {
     const msg = event.data;
     switch (msg.type) {
       case 'setLines':
-        lastLines = msg.lines;
         renderLines(msg.lines, currentPattern, isRegex, caseBtn.classList.contains('active'));
         if (msg.matchCount !== undefined) {
           matchInfoEl.textContent = msg.totalLines > 0 ? msg.matchCount + ' / ' + msg.totalLines : '';
@@ -430,17 +539,7 @@ export class FilteredTerminalView implements vscode.WebviewViewProvider {
         emptyStateEl.style.display = 'none';
         const caseSensitive = caseBtn.classList.contains('active');
         for (const line of msg.lines) {
-          const div = document.createElement('div');
-          div.className = 'line';
-          const numSpan = document.createElement('span');
-          numSpan.className = 'line-number';
-          numSpan.textContent = String(line.lineNumber);
-          const textSpan = document.createElement('span');
-          textSpan.className = 'line-text';
-          textSpan.innerHTML = highlightMatches(line.text, currentPattern, isRegex, caseSensitive);
-          div.appendChild(numSpan);
-          div.appendChild(textSpan);
-          outputEl.appendChild(div);
+          outputEl.appendChild(makeLine(line, currentPattern, isRegex, caseSensitive));
         }
         if (autoScroll) {
           outputEl.scrollTop = outputEl.scrollHeight;

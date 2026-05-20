@@ -2,7 +2,7 @@
   "name": "vscode-terminal-filter",
   "displayName": "Terminal Filter",
   "description": "Terminal output filtering: type a pattern and only matching lines are shown",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "alexsilvafdev",
   "repository": {
     "type": "git",

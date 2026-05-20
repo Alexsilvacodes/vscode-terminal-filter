@@ -19,12 +19,33 @@ const ANSI_REGEX = new RegExp(
   'g'
 );
 
+// Strips everything EXCEPT SGR (color/style) sequences \x1b[...m
+const NON_VISUAL_REGEX = new RegExp(
+  [
+    '\\x1b\\[[0-9;?]*[A-Za-ln-z]',    // CSI sequences except SGR (which ends in 'm')
+    '\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)', // OSC sequences (BEL or ST terminated)
+    '\\x1b\\][^\\n]*',                  // unterminated OSC
+    '\\x1b[()][A-Z0-9]',               // charset selection
+    '\\x1b[>=<]',                       // keypad / VT52 modes
+    '\\x1b[78DEHM]',                    // single-char escape commands
+    '\\x1b#[0-9]',                      // line attrs
+    '\\x07',                            // standalone BEL
+    '\\x0d',                            // carriage return
+    '[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1a]', // remaining C0 control chars
+  ].join('|'),
+  'g'
+);
+
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_REGEX, '');
 }
 
+export function stripNonVisual(text: string): string {
+  return text.replace(NON_VISUAL_REGEX, '');
+}
+
 export function isJunkLine(text: string): boolean {
-  const stripped = text.trim();
+  const stripped = stripAnsi(text).trim();
   return stripped.length === 0;
 }
 

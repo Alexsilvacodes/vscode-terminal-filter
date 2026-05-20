@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { stripAnsi, isJunkLine } from './filterEngine';
+import { stripNonVisual, isJunkLine } from './filterEngine';
 
 export class TerminalCapture {
   private buffers = new Map<vscode.Terminal, string[]>();
@@ -49,7 +49,7 @@ export class TerminalCapture {
     const buffer = this.buffers.get(terminal)!;
     const startIndex = buffer.length;
 
-    const clean = stripAnsi(data);
+    const clean = stripNonVisual(data);
     const rawLines = clean.split('\n');
 
     const incoming: string[] = [];
