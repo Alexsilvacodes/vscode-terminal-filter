@@ -1,0 +1,97 @@
+{
+  "name": "vscode-terminal-filter",
+  "displayName": "Terminal Filter",
+  "description": "Xcode-style terminal output filtering: type a pattern and only matching lines are shown",
+  "version": "0.1.0",
+  "publisher": "asilvafernandez",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "terminalFilter.focus",
+        "title": "Focus Terminal Filter",
+        "category": "Terminal Filter"
+      },
+      {
+        "command": "terminalFilter.clearBuffer",
+        "title": "Clear Captured Output",
+        "category": "Terminal Filter"
+      },
+      {
+        "command": "terminalFilter.clearFilter",
+        "title": "Clear Filter Pattern",
+        "category": "Terminal Filter"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "terminalFilter.focus",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "terminalFocus"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "terminalFilterPanel",
+          "title": "Terminal Filter",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "terminalFilterPanel": [
+        {
+          "type": "webview",
+          "id": "terminalFilter.filteredView",
+          "name": "Terminal Filter"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Terminal Filter",
+      "properties": {
+        "terminalFilter.defaultRegex": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use regex mode by default"
+        },
+        "terminalFilter.defaultCaseSensitive": {
+          "type": "boolean",
+          "default": false,
+          "description": "Case-sensitive by default"
+        },
+        "terminalFilter.maxBufferLines": {
+          "type": "number",
+          "default": 50000,
+          "description": "Maximum number of lines to keep in the capture buffer"
+        },
+        "terminalFilter.contextLines": {
+          "type": "number",
+          "default": 0,
+          "description": "Number of context lines to show around matches (0 = exact matches only)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.100.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
