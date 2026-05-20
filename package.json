@@ -1,9 +1,13 @@
 {
   "name": "vscode-terminal-filter",
   "displayName": "Terminal Filter",
-  "description": "Xcode-style terminal output filtering: type a pattern and only matching lines are shown",
+  "description": "Terminal output filtering: type a pattern and only matching lines are shown",
   "version": "0.1.0",
-  "publisher": "asilvafernandez",
+  "publisher": "alexsilvafdev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alexsilvacodes/vscode-terminal-filter.git"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
