@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e1e2e"/>
+      <stop offset="100%" style="stop-color:#11111b"/>
+    </linearGradient>
+    <linearGradient id="funnel" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#89b4fa"/>
+      <stop offset="100%" style="stop-color:#74c7ec"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#a6e3a1"/>
+      <stop offset="100%" style="stop-color:#94e2d5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="4" y="4" width="120" height="120" rx="24" ry="24" fill="url(#bg)"/>
+
+  <!-- Terminal prompt caret > -->
+  <text x="22" y="48" font-family="monospace" font-weight="bold" font-size="26" fill="url(#glow)" opacity="0.9">&gt;_</text>
+
+  <!-- Filter/funnel icon -->
+  <g transform="translate(64, 68)">
+    <!-- Funnel shape -->
+    <polygon points="-28,-18 28,-18 8,8 8,22 -8,22 -8,8" fill="none" stroke="url(#funnel)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+    <!-- Horizontal lines going into the funnel (unfiltered) -->
+    <line x1="-22" y1="-10" x2="22" y2="-10" stroke="#6c7086" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+    <line x1="-18" y1="-4" x2="18" y2="-4" stroke="#6c7086" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+    <line x1="-12" y1="2" x2="12" y2="2" stroke="#a6e3a1" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+
+    <!-- Filtered output line -->
+    <line x1="-4" y1="14" x2="4" y2="14" stroke="#a6e3a1" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>
