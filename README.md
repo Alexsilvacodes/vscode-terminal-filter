@@ -54,7 +54,7 @@ The extension captures terminal output via the Shell Integration API and display
 npm install
 npm run compile
 vsce package --allow-missing-repository
-code --install-extension vscode-terminal-filter-0.1.0.vsix
+code --install-extension vscode-terminal-filter-0.2.2.vsix
 ```
 
 ## Development
