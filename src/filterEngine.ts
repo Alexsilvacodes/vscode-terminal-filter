@@ -3,40 +3,29 @@ export interface FilteredLine {
   text: string;
 }
 
+const SHARED_ESCAPE_PATTERNS = [
+  '\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)',
+  '\\x1b\\][^\\n]*',
+  '\\x1b[()][A-Z0-9]',
+  '\\x1b[>=<]',
+  '\\x1b[78DEHM]',
+  '\\x1b#[0-9]',
+  '\\x07',
+  '\\x0d',
+  '[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1a]',
+];
+
 const ANSI_REGEX = new RegExp(
-  [
-    '\\x1b\\[[0-9;?]*[a-zA-Z]',       // CSI sequences (including DEC private like \x1b[?2004l)
-    '\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)', // OSC sequences (BEL or ST terminated)
-    '\\x1b\\][^\\n]*',                  // unterminated OSC (catch remaining on same line)
-    '\\x1b[()][A-Z0-9]',               // charset selection
-    '\\x1b[>=<]',                       // keypad / VT52 modes
-    '\\x1b[78DEHM]',                    // single-char escape commands
-    '\\x1b#[0-9]',                      // line attrs
-    '\\x07',                            // standalone BEL
-    '\\x0d',                            // carriage return
-    '[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1a]', // remaining C0 control chars (keep \\n and \\t)
-  ].join('|'),
+  ['\\x1b\\[[0-9;?]*[a-zA-Z]', ...SHARED_ESCAPE_PATTERNS].join('|'),
   'g'
 );
 
-// Strips everything EXCEPT SGR (color/style) sequences \x1b[...m
 const NON_VISUAL_REGEX = new RegExp(
-  [
-    '\\x1b\\[[0-9;?]*[A-Za-ln-z]',    // CSI sequences except SGR (which ends in 'm')
-    '\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)', // OSC sequences (BEL or ST terminated)
-    '\\x1b\\][^\\n]*',                  // unterminated OSC
-    '\\x1b[()][A-Z0-9]',               // charset selection
-    '\\x1b[>=<]',                       // keypad / VT52 modes
-    '\\x1b[78DEHM]',                    // single-char escape commands
-    '\\x1b#[0-9]',                      // line attrs
-    '\\x07',                            // standalone BEL
-    '\\x0d',                            // carriage return
-    '[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1a]', // remaining C0 control chars
-  ].join('|'),
+  ['\\x1b\\[[0-9;?]*[A-Za-ln-z]', ...SHARED_ESCAPE_PATTERNS].join('|'),
   'g'
 );
 
-export function stripAnsi(text: string): string {
+function stripAnsi(text: string): string {
   return text.replace(ANSI_REGEX, '');
 }
 
@@ -45,8 +34,7 @@ export function stripNonVisual(text: string): string {
 }
 
 export function isJunkLine(text: string): boolean {
-  const stripped = stripAnsi(text).trim();
-  return stripped.length === 0;
+  return stripAnsi(text).trim().length === 0;
 }
 
 export function filterLines(
@@ -72,8 +60,7 @@ export function filterLines(
 
   const directMatches = new Set<number>();
   for (let i = 0; i < lines.length; i++) {
-    const plain = stripAnsi(lines[i]);
-    if (regex.test(plain)) {
+    if (regex.test(stripAnsi(lines[i]))) {
       directMatches.add(i);
     }
   }

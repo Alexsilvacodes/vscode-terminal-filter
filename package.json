@@ -2,12 +2,13 @@
   "name": "vscode-terminal-filter",
   "displayName": "Terminal Filter",
   "description": "Terminal output filtering: type a pattern and only matching lines are shown",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "alexsilvafdev",
   "repository": {
     "type": "git",
     "url": "https://github.com/Alexsilvacodes/vscode-terminal-filter.git"
   },
+  "homepage": "https://marketplace.visualstudio.com/items?itemName=alexsilvafdev.vscode-terminal-filter",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.100.0"
@@ -22,47 +23,29 @@
   "contributes": {
     "commands": [
       {
-        "command": "terminalFilter.focus",
-        "title": "Focus Terminal Filter",
+        "command": "terminalFilter.filter",
+        "title": "Filter Terminal Output",
+        "category": "Terminal Filter"
+      },
+      {
+        "command": "terminalFilter.clearFilter",
+        "title": "Clear Filter",
         "category": "Terminal Filter"
       },
       {
         "command": "terminalFilter.clearBuffer",
         "title": "Clear Captured Output",
         "category": "Terminal Filter"
-      },
-      {
-        "command": "terminalFilter.clearFilter",
-        "title": "Clear Filter Pattern",
-        "category": "Terminal Filter"
       }
     ],
     "keybindings": [
       {
-        "command": "terminalFilter.focus",
-        "key": "ctrl+shift+f",
-        "mac": "cmd+shift+f",
+        "command": "terminalFilter.filter",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l",
         "when": "terminalFocus"
       }
     ],
-    "viewsContainers": {
-      "panel": [
-        {
-          "id": "terminalFilterPanel",
-          "title": "Terminal Filter",
-          "icon": "resources/icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "terminalFilterPanel": [
-        {
-          "type": "webview",
-          "id": "terminalFilter.filteredView",
-          "name": "Terminal Filter"
-        }
-      ]
-    },
     "configuration": {
       "title": "Terminal Filter",
       "properties": {

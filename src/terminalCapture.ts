@@ -8,13 +8,8 @@ export class TerminalCapture {
 
   private _onDidReceiveLines = new vscode.EventEmitter<{
     terminal: vscode.Terminal;
-    lines: string[];
-    startIndex: number;
   }>();
   readonly onDidReceiveLines = this._onDidReceiveLines.event;
-
-  private _onDidClear = new vscode.EventEmitter<vscode.Terminal>();
-  readonly onDidClear = this._onDidClear.event;
 
   constructor(maxLines: number) {
     this.maxLines = maxLines;
@@ -47,39 +42,26 @@ export class TerminalCapture {
       this.buffers.set(terminal, []);
     }
     const buffer = this.buffers.get(terminal)!;
-    const startIndex = buffer.length;
 
     const clean = stripNonVisual(data);
     const rawLines = clean.split('\n');
 
-    const incoming: string[] = [];
-    for (const line of rawLines) {
-      if (!isJunkLine(line)) {
-        incoming.push(line);
+    const startsWithNewline = data.startsWith('\n') || data.startsWith('\r\n');
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      if (i === 0 && !startsWithNewline && buffer.length > 0) {
+        buffer[buffer.length - 1] += line;
+      } else if (!isJunkLine(line)) {
+        buffer.push(line);
       }
     }
 
-    if (incoming.length === 0) {
-      return;
-    }
-
-    if (buffer.length > 0 && !data.startsWith('\n') && !data.startsWith('\r\n')) {
-      buffer[buffer.length - 1] += incoming[0];
-      incoming.shift();
-    }
-
-    buffer.push(...incoming);
-
     if (buffer.length > this.maxLines) {
-      const excess = buffer.length - this.maxLines;
-      buffer.splice(0, excess);
+      buffer.splice(0, buffer.length - this.maxLines);
     }
 
-    this._onDidReceiveLines.fire({
-      terminal,
-      lines: incoming,
-      startIndex,
-    });
+    this._onDidReceiveLines.fire({ terminal });
   }
 
   getBuffer(terminal: vscode.Terminal): string[] {
@@ -89,11 +71,9 @@ export class TerminalCapture {
   clearBuffer(terminal?: vscode.Terminal) {
     if (terminal) {
       this.buffers.set(terminal, []);
-      this._onDidClear.fire(terminal);
     } else {
       for (const [t] of this.buffers) {
         this.buffers.set(t, []);
-        this._onDidClear.fire(t);
       }
     }
   }
@@ -105,7 +85,6 @@ export class TerminalCapture {
   dispose() {
     this.disposables.forEach(d => d.dispose());
     this._onDidReceiveLines.dispose();
-    this._onDidClear.dispose();
     this.buffers.clear();
   }
 }

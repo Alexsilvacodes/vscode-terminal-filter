@@ -1,33 +1,31 @@
 # Terminal Filter for VS Code
 
-Terminal output filtering for VS Code. Type a pattern and only matching lines are shown.
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/alexsilvafdev.vscode-terminal-filter)](https://marketplace.visualstudio.com/items?itemName=alexsilvafdev.vscode-terminal-filter)
 
-The extension captures terminal output via the Shell Integration API and displays it in a dedicated **Terminal Filter** panel with real-time filtering, regex support, and match highlighting.
+Terminal output filtering for VS Code. Type a pattern and only matching lines are shown in a split terminal — like Xcode's console filter.
+
+## Install
+
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alexsilvafdev.vscode-terminal-filter), or search for **Terminal Filter** in the Extensions tab.
 
 ## Usage
 
-1. Open the **Terminal Filter** panel from the bottom panel tabs
-2. Run commands in the integrated terminal
-3. Type a filter pattern — only matching lines are shown with their original line numbers
+1. Run commands in the integrated terminal
+2. Press `Cmd+Shift+L` (Mac) / `Ctrl+Shift+L` (Win/Linux) to open the filter
+3. Type a pattern — a split terminal appears showing only matching lines
+4. **Enter** — closes the input, keeps the filtered view
+5. **Escape** — closes the input and the filtered view
 
-### Keyboard shortcuts
+### Filter input controls
 
-| Shortcut | Action |
-|---|---|
-| `Cmd+Shift+F` (Mac) / `Ctrl+Shift+F` (Win/Linux) | Focus the filter panel (when terminal is focused) |
-| `Escape` | Clear the filter pattern |
-
-### Filter bar controls
-
-- **`.*`** — Toggle regex mode
-- **`Aa`** — Toggle case sensitivity
-- **Trash icon** — Clear the captured output buffer
+- **`.*`** button — Toggle regex mode
+- **`Aa`** button — Toggle case sensitivity
 
 ## Commands
 
-- `Terminal Filter: Focus Terminal Filter` — Open and focus the filter panel
-- `Terminal Filter: Clear Captured Output` — Clear the output buffer
-- `Terminal Filter: Clear Filter Pattern` — Reset the filter
+- `Terminal Filter: Filter Terminal Output` — Open the filter input
+- `Terminal Filter: Clear Filter` — Close the filtered view
+- `Terminal Filter: Clear Captured Output` — Clear the capture buffer
 
 ## Settings
 
@@ -41,12 +39,7 @@ The extension captures terminal output via the Shell Integration API and display
 ## Requirements
 
 - VS Code 1.100+
-- Shell integration must be enabled in the terminal (enabled by default in modern VS Code with bash/zsh)
-
-## Limitations
-
-- Only captures output from commands executed **after** the extension activates — previous terminal history is not available
-- Shell integration must be supported by your shell for output capture to work
+- Shell integration must be enabled in the terminal (enabled by default with bash/zsh)
 
 ## Install from source
 
@@ -54,7 +47,7 @@ The extension captures terminal output via the Shell Integration API and display
 npm install
 npm run compile
 vsce package --allow-missing-repository
-code --install-extension vscode-terminal-filter-0.2.2.vsix
+code --install-extension vscode-terminal-filter-0.3.0.vsix
 ```
 
 ## Development

@@ -1,14 +1,21 @@
 import * as vscode from 'vscode';
-import { filterLines, FilteredLine } from './filterEngine';
+import { filterLines, isJunkLine } from './filterEngine';
 import { TerminalCapture } from './terminalCapture';
-import { FilteredTerminalView } from './filteredTerminalView';
+import { FilteredTerminal } from './filteredTerminal';
 import { StatusBarManager } from './statusBarManager';
 
 let terminalCapture: TerminalCapture;
-let filteredView: FilteredTerminalView;
 let statusBar: StatusBarManager;
-let currentPattern = '';
+let filteredTerminal: FilteredTerminal | undefined;
 let trackedTerminal: vscode.Terminal | undefined;
+let snapshotBuffer: string[] = [];
+let mergedBufferCache: string[] | undefined;
+let currentPattern = '';
+let isRegex = false;
+let isCaseSensitive = false;
+let activeInputBox: vscode.InputBox | undefined;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let contextLines = 0;
 
 export function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration('terminalFilter');
@@ -16,107 +23,68 @@ export function activate(context: vscode.ExtensionContext) {
   terminalCapture = new TerminalCapture(
     config.get<number>('maxBufferLines', 50000)
   );
-  filteredView = new FilteredTerminalView(context.extensionUri);
   statusBar = new StatusBarManager();
+  isRegex = config.get<boolean>('defaultRegex', false);
+  isCaseSensitive = config.get<boolean>('defaultCaseSensitive', false);
+  contextLines = config.get<number>('contextLines', 0);
 
-  filteredView.setDefaults(
-    config.get<boolean>('defaultRegex', false),
-    config.get<boolean>('defaultCaseSensitive', false)
-  );
-
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      FilteredTerminalView.viewType,
-      filteredView,
-      { webviewOptions: { retainContextWhenHidden: true } }
-    ),
-    terminalCapture,
-    statusBar,
-    filteredView
-  );
+  context.subscriptions.push(terminalCapture, statusBar);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('terminalFilter.focus', () => {
-      vscode.commands.executeCommand('terminalFilter.filteredView.focus');
-      filteredView.focusInput();
-    }),
-
-    vscode.commands.registerCommand('terminalFilter.clearBuffer', () => {
-      terminalCapture.clearBuffer(trackedTerminal);
-      filteredView.clear();
-      statusBar.hide();
+    vscode.commands.registerCommand('terminalFilter.filter', async () => {
+      if (!vscode.window.activeTerminal) {
+        vscode.window.showInformationMessage('No active terminal.');
+        return;
+      }
+      trackedTerminal = vscode.window.activeTerminal;
+      await snapshotTerminal();
+      ensureFilteredTerminal();
+      applyFilter();
+      showFilterInput();
     }),
 
     vscode.commands.registerCommand('terminalFilter.clearFilter', () => {
-      currentPattern = '';
-      refreshFilteredOutput();
-      statusBar.hide();
-    })
-  );
+      clearFilter();
+    }),
 
-  context.subscriptions.push(
-    filteredView.onFilterChange(({ pattern, isRegex, isCaseSensitive }) => {
-      currentPattern = pattern;
-      refreshFilteredOutput();
-    })
-  );
-
-  context.subscriptions.push(
-    filteredView.onClearBuffer(() => {
+    vscode.commands.registerCommand('terminalFilter.clearBuffer', () => {
+      snapshotBuffer = [];
+      mergedBufferCache = undefined;
       terminalCapture.clearBuffer(trackedTerminal);
-      filteredView.clear();
+      if (filteredTerminal?.isOpen()) {
+        filteredTerminal.showMessage('Buffer cleared.');
+      }
       statusBar.hide();
     })
   );
 
   context.subscriptions.push(
     terminalCapture.onDidReceiveLines(({ terminal }) => {
-      if (!trackedTerminal) {
-        trackedTerminal = terminal;
-        filteredView.setTerminalName(terminal.name);
+      if (terminal !== trackedTerminal || !filteredTerminal?.isOpen()) {
+        return;
       }
-      if (terminal === trackedTerminal) {
-        refreshFilteredOutput();
-      }
-    })
-  );
-
-  context.subscriptions.push(
-    terminalCapture.onDidClear(() => {
-      filteredView.clear();
-      statusBar.hide();
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.window.onDidChangeActiveTerminal((terminal) => {
-      if (terminal) {
-        trackedTerminal = terminal;
-        filteredView.setTerminalName(terminal.name);
-        refreshFilteredOutput();
-      }
+      mergedBufferCache = undefined;
+      scheduleRefresh();
     })
   );
 
   context.subscriptions.push(
     vscode.window.onDidCloseTerminal((terminal) => {
       if (terminal === trackedTerminal) {
-        trackedTerminal = vscode.window.activeTerminal ?? undefined;
-        if (trackedTerminal) {
-          filteredView.setTerminalName(trackedTerminal.name);
-        }
-        refreshFilteredOutput();
+        clearFilter();
+        trackedTerminal = undefined;
+        snapshotBuffer = [];
+        mergedBufferCache = undefined;
       }
     })
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('terminalFilter.maxBufferLines')) {
-        const newMax = vscode.workspace
-          .getConfiguration('terminalFilter')
-          .get<number>('maxBufferLines', 50000);
-        terminalCapture.updateMaxLines(newMax);
+      if (e.affectsConfiguration('terminalFilter')) {
+        const cfg = vscode.workspace.getConfiguration('terminalFilter');
+        terminalCapture.updateMaxLines(cfg.get<number>('maxBufferLines', 50000));
+        contextLines = cfg.get<number>('contextLines', 0);
       }
     })
   );
@@ -126,32 +94,119 @@ export function activate(context: vscode.ExtensionContext) {
   }
 }
 
-function refreshFilteredOutput() {
+async function snapshotTerminal(): Promise<void> {
+  const savedClipboard = await vscode.env.clipboard.readText();
+
+  await vscode.commands.executeCommand('workbench.action.terminal.selectAll');
+  await vscode.commands.executeCommand('workbench.action.terminal.copySelection');
+  await vscode.commands.executeCommand('workbench.action.terminal.clearSelection');
+
+  const content = await vscode.env.clipboard.readText();
+  await vscode.env.clipboard.writeText(savedClipboard);
+
+  snapshotBuffer = content.split('\n').filter(line => !isJunkLine(line));
+  mergedBufferCache = undefined;
+}
+
+function getMergedBuffer(): string[] {
+  if (mergedBufferCache) return mergedBufferCache;
+
   if (!trackedTerminal) {
-    filteredView.clear();
-    statusBar.hide();
-    return;
+    mergedBufferCache = snapshotBuffer;
+    return snapshotBuffer;
   }
 
-  const buffer = terminalCapture.getBuffer(trackedTerminal);
-  if (buffer.length === 0) {
-    filteredView.clear();
-    statusBar.hide();
-    return;
+  const liveBuffer = terminalCapture.getBuffer(trackedTerminal);
+  if (liveBuffer.length === 0) {
+    mergedBufferCache = snapshotBuffer;
+  } else if (snapshotBuffer.length === 0) {
+    mergedBufferCache = liveBuffer;
+  } else {
+    mergedBufferCache = [...snapshotBuffer, ...liveBuffer];
   }
 
-  const config = vscode.workspace.getConfiguration('terminalFilter');
-  const contextLines = config.get<number>('contextLines', 0);
+  return mergedBufferCache;
+}
 
-  const filtered = filterLines(
-    buffer,
-    currentPattern,
-    filteredView.isRegex,
-    filteredView.isCaseSensitive,
-    contextLines
-  );
+function ensureFilteredTerminal() {
+  if (filteredTerminal?.isOpen() || !trackedTerminal) return;
 
-  filteredView.setLines(filtered, filtered.length, buffer.length);
+  filteredTerminal = new FilteredTerminal();
+  filteredTerminal.onDidClose(() => {
+    filteredTerminal = undefined;
+    currentPattern = '';
+    statusBar.hide();
+  });
+  filteredTerminal.create(trackedTerminal, currentPattern);
+}
+
+function makeButtons(): vscode.QuickInputButton[] {
+  const activeColor = new vscode.ThemeColor('focusBorder');
+  return [
+    {
+      iconPath: new vscode.ThemeIcon('regex', isRegex ? activeColor : undefined),
+      tooltip: isRegex ? 'Regex (ON)' : 'Regex (OFF)',
+    },
+    {
+      iconPath: new vscode.ThemeIcon('case-sensitive', isCaseSensitive ? activeColor : undefined),
+      tooltip: isCaseSensitive ? 'Case Sensitive (ON)' : 'Case Sensitive (OFF)',
+    },
+  ];
+}
+
+function showFilterInput() {
+  if (activeInputBox) {
+    activeInputBox.dispose();
+  }
+
+  const inputBox = vscode.window.createInputBox();
+  inputBox.placeholder = 'Filter terminal output...';
+  inputBox.value = currentPattern;
+  inputBox.ignoreFocusOut = true;
+  inputBox.buttons = makeButtons();
+  activeInputBox = inputBox;
+
+  inputBox.onDidChangeValue((value) => {
+    currentPattern = value;
+    scheduleRefresh();
+  });
+
+  inputBox.onDidTriggerButton((button) => {
+    if (button.tooltip?.includes('Regex')) {
+      isRegex = !isRegex;
+    } else if (button.tooltip?.includes('Case')) {
+      isCaseSensitive = !isCaseSensitive;
+    }
+    inputBox.buttons = makeButtons();
+    applyFilter();
+  });
+
+  let accepted = false;
+
+  inputBox.onDidAccept(() => {
+    accepted = true;
+    inputBox.hide();
+  });
+
+  inputBox.onDidHide(() => {
+    if (!accepted) {
+      clearFilter();
+    }
+    activeInputBox = undefined;
+    inputBox.dispose();
+  });
+
+  inputBox.show();
+}
+
+function applyFilter() {
+  if (!filteredTerminal?.isOpen()) return;
+
+  const buffer = getMergedBuffer();
+  const filtered = filterLines(buffer, currentPattern, isRegex, isCaseSensitive, contextLines);
+
+  filteredTerminal.updateName(currentPattern);
+  filteredTerminal.writeLines(filtered);
 
   if (currentPattern) {
     statusBar.update(filtered.length, buffer.length);
@@ -160,4 +215,30 @@ function refreshFilteredOutput() {
   }
 }
 
-export function deactivate() {}
+function scheduleRefresh() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+  }
+  refreshTimer = setTimeout(() => {
+    applyFilter();
+  }, 100);
+}
+
+function clearFilter() {
+  currentPattern = '';
+  mergedBufferCache = undefined;
+  if (filteredTerminal) {
+    filteredTerminal.close();
+    filteredTerminal = undefined;
+  }
+  statusBar.hide();
+  if (activeInputBox) {
+    activeInputBox.hide();
+  }
+}
+
+export function deactivate() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+  }
+}
