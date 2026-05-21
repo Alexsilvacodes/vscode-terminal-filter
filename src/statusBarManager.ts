@@ -9,7 +9,7 @@ export class StatusBarManager {
       vscode.StatusBarAlignment.Right,
       100
     );
-    this.item.command = 'terminalFilter.focus';
+    this.item.command = 'terminalFilter.filter';
     this.item.name = 'Terminal Filter';
   }
 
